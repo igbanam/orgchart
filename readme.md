@@ -114,10 +114,35 @@ Each node object has `name`, `tags` (possibly empty), and `children`
 
 ## Installation
 
-Requires Rust (rustup.rs). Then, from this directory:
+With cargo:
+
+```
+$ cargo install orgchart
+```
+
+With Homebrew (macOS or Linux):
+
+```
+$ brew install igbanam/servings/orgchart
+```
+
+Or download a prebuilt binary from
+[github.com/igbanam/orgchart/releases](https://github.com/igbanam/orgchart/releases).
+Assets are named `orgchart-v<version>-<target>`; pick your platform:
+
+| Platform | Archive |
+|----------|---------|
+| macOS (Apple Silicon) | `orgchart-v0.1.0-aarch64-apple-darwin.tar.gz` |
+| macOS (Intel) | `orgchart-v0.1.0-x86_64-apple-darwin.tar.gz` |
+| Linux (x86_64) | `orgchart-v0.1.0-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux (arm64) | `orgchart-v0.1.0-aarch64-unknown-linux-gnu.tar.gz` |
+| Windows (x86_64) | `orgchart-v0.1.0-x86_64-pc-windows-msvc.zip` |
+| Windows (arm64) | `orgchart-v0.1.0-aarch64-pc-windows-msvc.zip` |
+
+Untar (or unzip), and put `orgchart` (or `orgchart.exe`) on your `PATH`.
+
+Building from source requires Rust (rustup.rs). Then, from this directory:
 
 ```
 $ cargo install --path .
 ```
-
-`orgchart` installs to `~/.cargo/bin` and can be run from anywhere.

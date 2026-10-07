@@ -2,6 +2,13 @@
 name = "orgchart"
 version = "0.1.0"
 edition = "2024"
+description = "Render ASCII org charts from an indentation-based DSL"
+license = "MIT"
+repository = "https://github.com/igbanam/orgchart"
+homepage = "https://github.com/igbanam/orgchart"
+readme = "readme.md"
+keywords = ["org-chart", "ascii", "cli", "diagram"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }
