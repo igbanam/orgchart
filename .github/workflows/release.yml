@@ -46,7 +46,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: orgchart-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/orgchart
+          path: |
+            target/${{ matrix.target }}/release/orgchart
+            target/${{ matrix.target }}/release/orgchart.exe
 
   release:
     needs: build
