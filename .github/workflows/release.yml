@@ -1,0 +1,126 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --locked
+
+  build:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-latest, cross: false }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-latest, cross: true }
+          - { target: x86_64-apple-darwin, os: macos-latest, cross: false }
+          - { target: aarch64-apple-darwin, os: macos-latest, cross: false }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest, cross: false }
+          - { target: aarch64-pc-windows-msvc, os: windows-latest, cross: false }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - if: matrix.cross
+        uses: taiki-e/install-action@v2
+        with: { tool: cross }
+      - if: ${{ !matrix.cross }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - if: matrix.cross
+        run: cross build --release --locked --target ${{ matrix.target }}
+      - name: Smoke test (native-target matrix entries only)
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-apple-darwin' || matrix.target == 'x86_64-pc-windows-msvc'
+        shell: bash
+        run: |
+          bin="target/${{ matrix.target }}/release/orgchart"
+          [ "${{ matrix.os }}" = windows-latest ] && bin="$bin.exe"
+          "$bin" --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orgchart-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/orgchart
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: dist }
+      - name: Package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir out
+          for t in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu \
+                   x86_64-apple-darwin aarch64-apple-darwin; do
+            (cd "dist/orgchart-$t" && tar czf "../../out/orgchart-v$VERSION-$t.tar.gz" orgchart)
+          done
+          for t in x86_64-pc-windows-msvc aarch64-pc-windows-msvc; do
+            (cd "dist/orgchart-$t" && zip "../../out/orgchart-v$VERSION-$t.zip" orgchart.exe)
+          done
+          (cd out && shasum -a 256 -- * > checksums.txt)
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
+
+  publish-crates:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::warning::CARGO_REGISTRY_TOKEN not set — skipping crates.io publish"
+            exit 0
+          fi
+          cargo publish --locked --token "$CARGO_REGISTRY_TOKEN"
+
+  update-tap:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: igbanam/homebrew-servings
+          token: ${{ secrets.SERVINGS_TAP_TOKEN }}
+          path: tap
+      - uses: actions/checkout@v4
+        with: { path: orgchart }
+      - name: Update Formula/orgchart.rb
+        env:
+          SERVINGS_TAP_TOKEN: ${{ secrets.SERVINGS_TAP_TOKEN }}
+        run: |
+          if [ -z "$SERVINGS_TAP_TOKEN" ]; then
+            echo "::warning::SERVINGS_TAP_TOKEN not set — skipping tap update (manual formula update needed)"
+            exit 0
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          dl() { curl -fsSL -o "$2" "https://github.com/igbanam/orgchart/releases/download/v$VERSION/$1"; }
+          dl "orgchart-v$VERSION-x86_64-apple-darwin.tar.gz" amd64-mac.tar.gz
+          dl "orgchart-v$VERSION-aarch64-apple-darwin.tar.gz" arm64-mac.tar.gz
+          dl "orgchart-v$VERSION-x86_64-unknown-linux-gnu.tar.gz" amd64-linux.tar.gz
+          dl "orgchart-v$VERSION-aarch64-unknown-linux-gnu.tar.gz" arm64-linux.tar.gz
+          sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
+          orgchart/scripts/homebrew-formula.sh "$VERSION" \
+            "$(sha amd64-mac.tar.gz)" "$(sha arm64-mac.tar.gz)" \
+            "$(sha amd64-linux.tar.gz)" "$(sha arm64-linux.tar.gz)" \
+            > tap/Formula/orgchart.rb
+          cd tap
+          git config user.name "igbanam"
+          git config user.email "xigbanam@gmail.com"
+          git add Formula/orgchart.rb
+          git commit -m "orgchart: v$VERSION" || echo "no formula changes"
+          git push
