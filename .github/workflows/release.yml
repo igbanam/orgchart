@@ -94,21 +94,29 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
+      - name: Check tap token
+        id: guard
+        env:
+          SERVINGS_TAP_TOKEN: ${{ secrets.SERVINGS_TAP_TOKEN }}
+        run: |
+          if [ -n "$SERVINGS_TAP_TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::SERVINGS_TAP_TOKEN not set — skipping tap update (manual formula update needed)"
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.guard.outputs.has_token == 'true'
         with:
           repository: igbanam/homebrew-servings
           token: ${{ secrets.SERVINGS_TAP_TOKEN }}
           path: tap
       - uses: actions/checkout@v4
+        if: steps.guard.outputs.has_token == 'true'
         with: { path: orgchart }
       - name: Update Formula/orgchart.rb
-        env:
-          SERVINGS_TAP_TOKEN: ${{ secrets.SERVINGS_TAP_TOKEN }}
+        if: steps.guard.outputs.has_token == 'true'
         run: |
-          if [ -z "$SERVINGS_TAP_TOKEN" ]; then
-            echo "::warning::SERVINGS_TAP_TOKEN not set — skipping tap update (manual formula update needed)"
-            exit 0
-          fi
           VERSION="${GITHUB_REF_NAME#v}"
           dl() { curl -fsSL -o "$2" "https://github.com/igbanam/orgchart/releases/download/v$VERSION/$1"; }
           dl "orgchart-v$VERSION-x86_64-apple-darwin.tar.gz" amd64-mac.tar.gz
